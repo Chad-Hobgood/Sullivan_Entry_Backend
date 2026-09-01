@@ -1,29 +1,10 @@
-/** * Built by Chad Hobgood, Engineering lead 2025, 
- * Last Update: 1/25/2025 (Metrics Update)
- * * FOR FUTURE USERS:
- * Welcome lead lab assistant, 
- * the most important function that you need to be aware of to keep this sheet running is authorizeScript
- * Go up to the drop down at the top and change it to that function, and click run and a pop up should show up
- * Make sure that you fill that out and it will be able to send emails as you
- * 
- * 
- * * Dev notes:
- * This version has been refactored for improved resilience against race conditions.
- * The main thing that this is deisgned to do is automate the task I found with the entry sheet that I found annoying
- * This does make the sheet grow downwards, which I dont like but I got outvoted on that design choice
- * and the immediate deletion of the source row after archiving, which eliminates the erase on entry error
- * 
- * For Future Development:
- * Have something to make it look for ppl on the bad apples list
- * 
- * * The basic idea is this,
- * 1. At Midnight, make a new date stamp
- * 2. Everytime that someone swipes in, collect a time stamp so we have that information 
- * 
- * * * Known limitations:
- * 1. Google scripts has a limit of 100 emails sent in a day.
- * 2. Properties read/write is 50,0000/day.
- * 3. Triggers total runtime: 90min/day. - We have yet 
+/**
+ * EV Entry authorization helper.
+ *
+ * Operational layout and deployment instructions are maintained in
+ * EV_Entry/Readme.md. The sheet now uses B2 as a permanent intake cell and
+ * inserts completed records at the top of the history; it does not append
+ * entries at the bottom.
  */
 
 
