@@ -19,6 +19,11 @@ The basic idea is this:
 4. When marked as "Completed" or "Flagged," the script acquires a lock, sends the email, archives the data, and immediately deletes the original row.
 5. Everynight we make sure the archive has no duplicate data, and add in some spreadsheet functions to make sure that the data we need is there
 
+`runEvEntryMaintenance` can be run manually or used as a maintenance trigger
+for the EV Entry workflow. It calls the EV Entry log cleaner, which removes
+duplicate swipes and fully empty rows while preserving any partially populated
+rows. It does not call the 3D print queue's archive or pending-status functions.
+
 ## Timestamping and Entry Statistics Automation
 ### Why did we need this:
 1. KPI for space usage

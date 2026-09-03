@@ -4,8 +4,9 @@
  *
  * The earliest swipe in a five-minute window is retained. Rows are examined
  * by timestamp rather than sheet position, because the newest records appear
- * at the top of this sheet. Date-only separator rows, blank IDs, and rows
- * without a valid timestamp are never deleted.
+ * at the top of this sheet. Date-only separator rows and rows without a valid
+ * timestamp are never treated as duplicate entries. Fully empty rows are
+ * removed, while any row containing data in any cell is preserved.
  */
 function cleanDuplicateEntries() {
   const config = EV_ENTRY_CONFIG;
@@ -35,18 +36,22 @@ function cleanDuplicateEntries() {
     }
 
     const rowCount = lastRow - config.firstRecordRow + 1;
-    const values = sheet.getRange(
-      config.firstRecordRow,
-      config.idColumn,
-      rowCount,
-      config.timestampColumn - config.idColumn + 1,
-    ).getValues();
+    const lastColumn = sheet.getLastColumn();
+    const values = sheet.getRange(config.firstRecordRow, 1, rowCount, lastColumn).getValues();
 
     const visitsByStudent = new Map();
     let skippedRows = 0;
+    const emptyRows = [];
     values.forEach((row, index) => {
-      const studentId = row[0];
-      const timestamp = row[config.timestampColumn - config.idColumn];
+      const rowNumber = config.firstRecordRow + index;
+      const isEmptyRow = row.every((cell) => cell === '' || cell === null);
+      if (isEmptyRow) {
+        emptyRows.push(rowNumber);
+        return;
+      }
+
+      const studentId = row[config.idColumn - 1];
+      const timestamp = row[config.timestampColumn - 1];
       const isValidTimestamp = timestamp instanceof Date && !isNaN(timestamp);
 
       if (studentId === '' || studentId === null || !isValidTimestamp) {
@@ -57,7 +62,7 @@ function cleanDuplicateEntries() {
       const studentKey = String(studentId).trim();
       if (!visitsByStudent.has(studentKey)) visitsByStudent.set(studentKey, []);
       visitsByStudent.get(studentKey).push({
-        rowNumber: config.firstRecordRow + index,
+        rowNumber,
         timestampMs: timestamp.getTime(),
       });
     });
@@ -80,14 +85,17 @@ function cleanDuplicateEntries() {
       });
     });
 
-    if (duplicateRows.length === 0) {
-      Logger.log(`[EV Entry] No duplicate entries found. Skipped ${skippedRows} non-entry rows.`);
+    const rowsToDelete = [...new Set([...emptyRows, ...duplicateRows])];
+    if (rowsToDelete.length === 0) {
+      Logger.log(
+        `[EV Entry] No duplicate or fully empty rows found. Skipped ${skippedRows} non-entry rows.`,
+      );
       return;
     }
 
-    deleteRowsInDescendingGroups(sheet, duplicateRows);
+    deleteRowsInDescendingGroups(sheet, rowsToDelete);
     Logger.log(
-      `[EV Entry] Removed ${duplicateRows.length} duplicate entries within the five-minute window. ` +
+      `[EV Entry] Removed ${duplicateRows.length} duplicate entries and ${emptyRows.length} fully empty rows. ` +
       `Skipped ${skippedRows} non-entry rows.`,
     );
   } catch (error) {
@@ -110,6 +118,8 @@ function cleanDuplicateEntries() {
  */
 function deleteRowsInDescendingGroups(sheet, rowNumbers) {
   const rows = [...new Set(rowNumbers)].sort((a, b) => b - a);
+  if (rows.length === 0) return;
+
   let groupStart = rows[0];
   let groupCount = 1;
   let previousRow = rows[0];

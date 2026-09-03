@@ -24,8 +24,10 @@ with that day's records and clearly separates it from the preceding day.
 
 `cleanDuplicateEntries` is designed for an hourly time trigger. For each
 student, it keeps the earliest valid timestamp and removes later swipes made
-within five minutes of that retained swipe. It ignores date markers and rows
-without both an ID and a valid timestamp.
+within five minutes of that retained swipe. It also removes rows that are
+fully empty across all columns in the sheet. Any row with data in at least one
+cell—including date markers, partial records, or rows without a valid
+timestamp—is preserved in full.
 
 ## One-time deployment
 
