@@ -1,6 +1,11 @@
 # Logging
 
-Analytics functions that read timestamps and student IDs from `EV Design studio` and overwrite metric tables in `Dashboard_Data_Link`.
+This directory coordinates logging-related automation.
 
-The scripts produce arrival-by-hour, rolling-user, visit-frequency, visit-gap, regular-visitor, day-of-week, and day/time results. Each function can be run manually or assigned to a time-driven trigger. The detailed output ranges are documented in [`../../docs/PROJECT_GUIDE.md`](../../docs/PROJECT_GUIDE.md).
+- `Logging_Handler.js` is the single trigger entry point for refreshing all entry metrics.
+- `Entry_Logging/` contains the individual analytics functions.
+- `Equipment Logging/` is reserved for future equipment metrics.
 
+Create one time-driven trigger for `runLoggingUpdates`. Do not create separate triggers for the functions in `Entry_Logging`; they remain available for manual runs and future reuse.
+
+The handler writes start, completion, step, and error messages to the Apps Script execution log with the `[Logging Handler]` prefix. Open **Executions** in the Apps Script editor to follow a run.

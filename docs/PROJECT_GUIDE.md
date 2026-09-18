@@ -13,7 +13,9 @@ EV_Entry/
 ├── Authorize_Entry.js       Manual authorization check
 ├── Entry_Sheet/             Intake and log-maintenance scripts
 ├── Equipment_Usage/         Reserved for future automation
-└── Logging/                 Dashboard metric scripts
+└── Logging/                 Dashboard metric scripts and handler
+    ├── Entry_Logging/       Individual entry analytics functions
+    └── Equipment Logging/   Reserved equipment analytics area
 docs/                        Project documentation
 ```
 
@@ -72,6 +74,10 @@ The logging scripts read IDs from column B and timestamps from column F unless n
 | `calculateDayOfWeekDistribution` | `R:S` | Reports average users per weekday, normalized by the number of observed dates. |
 | `calculateTimeOfDayByDay` | `U:AF`, then `U10:X30` | Writes a Monday-Sunday by 12 PM-10 PM grid and the 20 busiest day/time pairs. |
 
+`runLoggingUpdates` in `EV_Entry/Logging/Logging_Handler.js` calls all seven entry-logging functions in one Apps Script execution. Use it as the time-driven trigger target instead of creating one trigger per metric function. This reduces the number of Apps Script executions because one trigger invocation refreshes all logging tables; it does not reduce the spreadsheet work performed during that execution.
+
+The handler logs its start and completion, each step before and after execution, and the function name and error message if a step fails. These messages use the `[Logging Handler]` prefix and are available in the Apps Script editor's **Executions** view.
+
 The analytics functions expect valid JavaScript `Date` values in the timestamp column. Invalid or missing timestamps are ignored. The rolling counts use the execution time as “now,” so results change depending on when the function runs.
 
 ## Deployment
@@ -86,7 +92,7 @@ Before changing a production workbook, make a spreadsheet backup.
 6. Create an installable spreadsheet “On edit” trigger for `onEdit`.
 7. Point a daily time-driven trigger at `dailyDateStamper`.
 8. Point an hourly time-driven trigger at `cleanDuplicateEntries`.
-9. Run the logging functions manually once to confirm that the dashboard tables populate, then schedule only the refreshes the dashboard needs.
+9. Run `runLoggingUpdates` manually once to confirm that all dashboard tables populate, then create one time-driven trigger for it. Remove the old time-driven triggers for the individual logging functions after the replacement has been tested.
 
 The account authorizing the script must be able to open the private lookup workbook. Lab assistants who only use the entry workbook do not need direct access to that lookup workbook.
 
