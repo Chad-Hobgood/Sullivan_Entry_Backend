@@ -1,6 +1,7 @@
 # Equipment_Usage
 
-Reserved for future Google Apps Script automation related to equipment usage.
+Scripts for recording equipment selections from the `Equipment Usage` sheet.
 
-No equipment-usage scripts are currently stored in this directory.
-
+`Record_Equipment_Usage.js` watches `Equipment Usage!B1` through the shared
+installable `onEdit` handler. A selected value is inserted at row 2 in column
+B, timestamped in column C, and then cleared from the dropdown.

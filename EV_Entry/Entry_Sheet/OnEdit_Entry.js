@@ -46,6 +46,10 @@ function onEdit(e) {
     return;
   }
 
+  // Keep one installable edit trigger for both entry workflows. The equipment
+  // handler ignores all edits outside Equipment Usage!B1.
+  handleEquipmentUsageEdit(e);
+
   const range = e.range;
   const sheet = range.getSheet();
   const config = EV_ENTRY_CONFIG;

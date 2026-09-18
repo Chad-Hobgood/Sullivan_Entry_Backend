@@ -12,10 +12,10 @@ The scripts are intended to be copied into or maintained as a bound Apps Script 
 EV_Entry/
 ├── Authorize_Entry.js       Manual authorization check
 ├── Entry_Sheet/             Intake and log-maintenance scripts
-├── Equipment_Usage/         Reserved for future automation
+├── Equipment_Usage/         Equipment selection capture
 └── Logging/                 Dashboard metric scripts and handler
     ├── Entry_Logging/       Individual entry analytics functions
-    └── Equipment Logging/   Reserved equipment analytics area
+    └── Equipment_Logging/   Equipment analytics functions
 docs/                        Project documentation
 ```
 
@@ -73,10 +73,11 @@ The logging scripts read IDs from column B and timestamps from column F unless n
 | `calculateRegularVisitGaps` | `O:P` | Groups users by daily, weekly, bi-weekly, monthly, or occasional average visit gaps. |
 | `calculateDayOfWeekDistribution` | `R:S` | Reports average users per weekday, normalized by the number of observed dates. |
 | `calculateTimeOfDayByDay` | `U:AF`, then `U10:X30` | Writes a Monday-Sunday by 12 PM-10 PM grid and the 20 busiest day/time pairs. |
+| `calculateEquipmentUsageCounts` | `AH:AI` | Counts each equipment option recorded in `Equipment Usage!B2:B`, including configured dropdown options with zero uses. |
 
 `runLoggingUpdates` in `EV_Entry/Logging/Logging_Handler.js` calls all seven entry-logging functions in one Apps Script execution. Use it as the time-driven trigger target instead of creating one trigger per metric function. This reduces the number of Apps Script executions because one trigger invocation refreshes all logging tables; it does not reduce the spreadsheet work performed during that execution.
 
-The handler logs its start and completion, each step before and after execution, and the function name and error message if a step fails. These messages use the `[Logging Handler]` prefix and are available in the Apps Script editor's **Executions** view.
+The handler also runs `calculateEquipmentUsageCounts`, so equipment counts refresh with the entry metrics. It logs its start and completion, each step before and after execution, and the function name and error message if a step fails. These messages use the `[Logging Handler]` prefix and are available in the Apps Script editor's **Executions** view.
 
 The analytics functions expect valid JavaScript `Date` values in the timestamp column. Invalid or missing timestamps are ignored. The rolling counts use the execution time as “now,” so results change depending on when the function runs.
 
