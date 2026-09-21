@@ -30,6 +30,9 @@ const EV_ENTRY_CONFIG = {
   evStatusColumn: 3,
   trainingStatusColumn: 4,
   timestampColumn: 6,
+  // A short acquisition limit prevents a queued trigger from waiting for a
+  // long-running maintenance job. It is a wait limit, not a lock lifetime.
+  lockWaitMs: 5000,
 };
 
 /**
@@ -38,9 +41,13 @@ const EV_ENTRY_CONFIG = {
  * This must be an installable edit trigger, not a simple trigger: inserting
  * rows and reading the private lookup workbook require spreadsheet authorization.
  *
+ * Do not rename this function to `onEdit`: that reserved name also creates a
+ * simple trigger, which cannot open the private lookup workbook. Create an
+ * installable spreadsheet edit trigger for this exact function instead.
+ *
  * @param {GoogleAppsScript.Events.SheetsOnEdit} e The edit event object.
  */
-function onEdit(e) {
+function processEvEntryEdit(e) {
   if (!e || !e.range) {
     Logger.log('[EV Entry] Ignored edit because no event range was supplied.');
     return;
@@ -66,29 +73,33 @@ function onEdit(e) {
     return;
   }
 
+  // e.value belongs to this particular edit. Reading B2 only after waiting
+  // for a lock can otherwise capture a later scan and lose this one.
+  const studentId = Object.prototype.hasOwnProperty.call(e, 'value')
+    ? e.value
+    : range.getValue();
+  if (studentId === '' || studentId === null || studentId === undefined) {
+    Logger.log('[EV Entry] Intake cell was cleared or empty; no record created.');
+    return;
+  }
+
   Logger.log('[EV Entry] Intake edit detected in B2.');
+
   const lock = LockService.getDocumentLock();
   let lockAcquired = false;
   try {
+    // Lookup I/O does not change the entry sheet, so keep it outside the
+    // critical section. The lock is retained only for the row insertion and
+    // writes that must be atomic.
+    const lookupData = getEvEntryLookupData();
+    const statuses = getEvEntryStatuses(studentId, lookupData);
+
     Logger.log('[EV Entry] Waiting for the document lock.');
-    lock.waitLock(30000);
+    acquireEvEntryDocumentLock(lock, 'intake processing');
     lockAcquired = true;
     Logger.log('[EV Entry] Document lock acquired.');
 
-    // Read after acquiring the lock in case two scans happen nearly together.
-    const studentId = range.getValue();
-    if (studentId === '' || studentId === null) {
-      Logger.log('[EV Entry] Intake cell was cleared or empty; no record created.');
-      return;
-    }
-
     const timestamp = new Date();
-
-    // Read only identifier columns from the private lookup workbook. Statuses
-    // are written as values, so the entry workbook never contains an
-    // IMPORTRANGE/XLOOKUP formula or copied personal data.
-    const lookupData = getEvEntryLookupData();
-    const statuses = getEvEntryStatuses(studentId, lookupData);
 
     // Existing records start at row 3, so they all move down while B2 remains
     // the next ready-to-scan cell.
@@ -103,10 +114,14 @@ function onEdit(e) {
       .setNumberFormat('MM/dd/yyyy HH:mm:ss');
     Logger.log('[EV Entry] Record values, private lookup statuses, and timestamp written to row 3.');
 
-    // Clear only the scanned value. The daily date marker is a separate row
-    // in Column A and moves down with the day's records.
-    range.clearContent();
-    Logger.log('[EV Entry] Intake cell cleared; entry processing completed.');
+    // Do not erase a newer scan that arrived while this event was waiting.
+    // The later event has its own e.value and will process independently.
+    if (getEvEntryIdKey(range.getValue()) === getEvEntryIdKey(studentId)) {
+      range.clearContent();
+      Logger.log('[EV Entry] Intake cell cleared; entry processing completed.');
+    } else {
+      Logger.log('[EV Entry] Intake cell changed during processing; newer value was preserved.');
+    }
   } catch (error) {
     Logger.log(`[EV Entry] ERROR while processing intake: ${getEvEntryErrorMessage(error)}`);
     console.error(`Unable to process EV entry: ${getEvEntryErrorMessage(error)}`);
@@ -116,6 +131,26 @@ function onEdit(e) {
       lock.releaseLock();
       Logger.log('[EV Entry] Document lock released.');
     }
+  }
+}
+
+/**
+ * Acquires the bound-workbook lock with a bounded wait.
+ * Locks are automatically released when their owning execution terminates;
+ * this limit controls only how long a new execution is willing to queue.
+ *
+ * @param {GoogleAppsScript.Lock.Lock|null} lock
+ * @param {string} operation
+ */
+function acquireEvEntryDocumentLock(lock, operation) {
+  if (!lock) {
+    throw new Error(`Document lock is unavailable for ${operation}. This project must be bound to the entry workbook.`);
+  }
+  if (!lock.tryLock(EV_ENTRY_CONFIG.lockWaitMs)) {
+    throw new Error(
+      `Could not acquire the document lock for ${operation} within ` +
+      `${EV_ENTRY_CONFIG.lockWaitMs / 1000} seconds. This execution made no spreadsheet changes.`,
+    );
   }
 }
 
@@ -150,6 +185,41 @@ function diagnoseEvEntryConfiguration() {
   } catch (error) {
     Logger.log(`[EV Entry] FAIL: lookup workbook access: ${getEvEntryErrorMessage(error)}`);
   }
+
+  const editTriggers = ScriptApp.getProjectTriggers().filter((trigger) => {
+    return trigger.getEventType() === ScriptApp.EventType.ON_EDIT;
+  });
+  Logger.log(
+    `[EV Entry] Installable edit triggers owned by this account: ` +
+    `${editTriggers.length === 0 ? '(none)' : editTriggers.map((trigger) => trigger.getHandlerFunction()).join(', ')}`,
+  );
+}
+
+/**
+ * Run once manually as the account that owns the production trigger.
+ * It removes prior edit triggers for this workflow, then creates exactly one
+ * installable trigger for the non-reserved handler name.
+ */
+function installEvEntryEditTrigger() {
+  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  if (!spreadsheet) throw new Error('No active spreadsheet. Bind this project to the entry workbook.');
+
+  const workflowHandlers = new Set(['onEdit', 'processEvEntryEdit']);
+  ScriptApp.getProjectTriggers().forEach((trigger) => {
+    if (
+      trigger.getEventType() === ScriptApp.EventType.ON_EDIT &&
+      workflowHandlers.has(trigger.getHandlerFunction())
+    ) {
+      ScriptApp.deleteTrigger(trigger);
+      Logger.log(`[EV Entry] Removed prior edit trigger for ${trigger.getHandlerFunction()}.`);
+    }
+  });
+
+  ScriptApp.newTrigger('processEvEntryEdit')
+    .forSpreadsheet(spreadsheet)
+    .onEdit()
+    .create();
+  Logger.log('[EV Entry] Created the installable edit trigger for processEvEntryEdit.');
 }
 
 /** @param {GoogleAppsScript.Spreadsheet.Spreadsheet} spreadsheet @return {string[]} */
@@ -210,7 +280,7 @@ function getEvEntryIdKey(value) {
 function getEvEntryStatuses(studentId, lookupData) {
   const id = getEvEntryIdKey(studentId);
   return {
-    evStatus: lookupData.rosterIds[id] ? 'EV Student' : 'Not EV Student',
+    evStatus: lookupData.rosterIds[id] ? 'Approved Entry' : 'Not Approved Entry',
     trainingStatus: lookupData.certIds[id]
       ? 'Completed Training'
       : 'Not Done Training',
@@ -241,7 +311,7 @@ function prepareTopEntryLayout() {
   let lockAcquired = false;
   try {
     Logger.log('[EV Entry] Waiting for the document lock for migration.');
-    lock.waitLock(30000);
+    acquireEvEntryDocumentLock(lock, 'layout migration');
     lockAcquired = true;
     Logger.log('[EV Entry] Document lock acquired for migration.');
 

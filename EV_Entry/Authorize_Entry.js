@@ -11,7 +11,8 @@
 
 /**
  * This function is included solely to force the user to complete the necessary
- * authorization steps for the script to run all its functions (like onEdit
+ * authorization steps for the script to run all its functions (like
+ * processEvEntryEdit
  * and dailyDateStamper, which require permissions to edit the spreadsheet).
  *
  * The function itself does nothing functional for the sheet beyond triggering
@@ -19,16 +20,19 @@
  * You will have to accept the request to run the script on the spreadsheet tab to complete the process
  */
 function authorizeScript() {
-  // Accessing the active spreadsheet forces the script to request the
-  // 'Spreadsheet' scope during the authorization process.
+  // Access both the entry workbook and the private lookup workbook. This
+  // verifies the full spreadsheet scope required by the installable edit
+  // trigger; merely accessing the active workbook is not enough evidence.
   try {
     const ssName = SpreadsheetApp.getActiveSpreadsheet().getName();
-    Logger.log(`Successfully accessed spreadsheet: ${ssName}`);
+    const lookupName = SpreadsheetApp.openById(EV_ENTRY_CONFIG.lookupSpreadsheetId).getName();
+    Logger.log(`Successfully accessed entry workbook: ${ssName}`);
+    Logger.log(`Successfully accessed private lookup workbook: ${lookupName}`);
     // Optional: Use a simple UI alert to confirm the function ran successfully
     // after authorization is complete, which is helpful feedback for the user.
     SpreadsheetApp.getUi().alert(
-      'Authorization Check Complete', 
-      'The script has successfully run the authorization check. If you saw a request for permissions, you should now be fully authorized.', 
+      'Authorization Check Complete',
+      'The script can access both the entry and private lookup workbooks. You can now create the installable edit trigger.',
       SpreadsheetApp.getUi().ButtonSet.OK
     );
   } catch (e) {

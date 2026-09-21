@@ -31,7 +31,7 @@ function handleEquipmentUsageEdit(e) {
 
   try {
     Logger.log('[Equipment Usage] Waiting for the document lock.');
-    lock.waitLock(30000);
+    acquireEvEntryDocumentLock(lock, 'equipment-usage recording');
     lockAcquired = true;
     Logger.log('[Equipment Usage] Document lock acquired.');
 

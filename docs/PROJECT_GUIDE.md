@@ -48,8 +48,8 @@ The shared configuration is defined at the top of `Entry_Sheet/OnEdit_Entry.js`.
 ## Entry workflow
 
 1. A staff member scans or types an ID into `EV Design studio!B2`.
-2. The installable `onEdit` handler accepts only a single-cell edit to that exact cell.
-3. The script obtains a document lock so simultaneous scans do not collide.
+2. The installable `processEvEntryEdit` handler accepts only a single-cell edit to that exact cell. It is deliberately *not* named `onEdit`, so a restricted simple trigger cannot run it.
+3. The script obtains a document lock only for the row insertion and writes, so simultaneous scans do not collide. The event value is captured before waiting, preserving each scan if multiple edits arrive together.
 4. It reads only IDs from the configured private roster and certification sheets.
 5. It inserts a row below the intake row, writes the new record at row 3, and clears `B2`.
 6. Existing history moves down; no existing record is overwritten.
@@ -88,9 +88,9 @@ Before changing a production workbook, make a spreadsheet backup.
 1. Copy the current files into the bound Apps Script project.
 2. Confirm the entry tab is named `EV Design studio` and the dashboard tab is named `Dashboard_Data_Link`.
 3. Confirm the lookup workbook ID and lookup sheet names in `EV_ENTRY_CONFIG`.
-4. Run `authorizeScript` manually and accept the requested permissions.
+4. As the account that will own the production trigger, run `authorizeScript` manually and confirm that it reports successful access to both workbooks. Accept the requested permissions.
 5. Run `prepareTopEntryLayout` once if migrating an older bottom-appending layout. Review the function comments and back up first; it inserts the intake row and rebuilds columns C and D as values.
-6. Create an installable spreadsheet “On edit” trigger for `onEdit`.
+6. Run `installEvEntryEditTrigger` once as that same account. It replaces this workflow's old edit trigger(s) **owned by that account** with exactly one installable spreadsheet edit trigger for `processEvEntryEdit`. Each other account that previously owned an `onEdit` trigger must delete its old trigger from **Triggers**; Apps Script triggers are user-owned. Do not create a simple `onEdit` function or an additional edit trigger manually.
 7. Point a daily time-driven trigger at `dailyDateStamper`.
 8. Point an hourly time-driven trigger at `cleanDuplicateEntries`.
 9. Run `runLoggingUpdates` manually once to confirm that all dashboard tables populate, then create one time-driven trigger for it. Remove the old time-driven triggers for the individual logging functions after the replacement has been tested.
@@ -109,7 +109,13 @@ Student IDs are not written to the diagnostic and operational log messages. Use 
 
 ### A scan does nothing
 
-Check that the edit is a single-cell edit to `B2`, the sheet name matches exactly, and the trigger is installable rather than a simple trigger. Then inspect the execution log. The trigger owner also needs access to the private lookup workbook.
+Check that the edit is a single-cell edit to `B2` and the sheet name matches exactly. Run `diagnoseEvEntryConfiguration` as the trigger owner: lookup access must be `OK` and exactly one installable edit trigger, `processEvEntryEdit`, must be listed. The trigger owner also needs access to the private lookup workbook.
+
+### Lock timeout or apparent lock incident
+
+`LockService` locks are owned by an execution, not by a spreadsheet file. This project releases each acquired lock in `finally`, and Apps Script also releases a lock when its owning execution terminates. There is no safe 2 AM job that can forcibly release another execution's lock. The five-second `tryLock` limit is therefore intentionally a **wait** limit: a contended execution fails quickly without changing the intake cell, instead of queueing for 30 seconds. Inspect the execution that held the lock rather than attempting to clear it.
+
+For an incident, open **Executions**, filter the event time for **Running**, **Failed**, and **Timed out**, and compare the function/trigger type, owner, duration, and logs. Enable uncaught-exception logging to Cloud Operations and use Cloud Logging/Error Reporting for durable history.
 
 ### A missing-sheet error appears
 

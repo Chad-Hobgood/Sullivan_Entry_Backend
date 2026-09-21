@@ -25,7 +25,7 @@ function cleanDuplicateEntries() {
   let lockAcquired = false;
   try {
     Logger.log('[EV Entry] Waiting for the document lock for duplicate-entry cleanup.');
-    lock.waitLock(30000);
+    acquireEvEntryDocumentLock(lock, 'duplicate-entry cleanup');
     lockAcquired = true;
     Logger.log('[EV Entry] Document lock acquired for duplicate-entry cleanup.');
 

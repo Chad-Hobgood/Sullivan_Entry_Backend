@@ -21,7 +21,7 @@ function dailyDateStamper() {
   let lockAcquired = false;
   try {
     Logger.log('[EV Entry] Waiting for the document lock for daily date stamp.');
-    lock.waitLock(30000);
+    acquireEvEntryDocumentLock(lock, 'daily date stamping');
     lockAcquired = true;
     Logger.log('[EV Entry] Document lock acquired for daily date stamp.');
     Logger.log('[EV Entry] Inserting a date-only marker at row 3.');
