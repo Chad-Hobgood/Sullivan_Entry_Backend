@@ -1,6 +1,6 @@
 /**
  * Counts each equipment option recorded in Equipment Usage column B.
- * Results are written to Dashboard_Data_Link starting at column AH.
+ * Results are written to Dashboard_Data_Link columns AL:AM.
  */
 function calculateEquipmentUsageCounts() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -38,13 +38,13 @@ function calculateEquipmentUsageCounts() {
     .sort((a, b) => a.localeCompare(b))
     .forEach((equipment) => output.push([equipment, counts[equipment]]));
 
-  dashboardSheet.getRange('AH:AI').clearContent();
-  dashboardSheet.getRange(1, 34, output.length, 2).setValues(output);
-  dashboardSheet.getRange('AH1:AI1')
+  dashboardSheet.getRange('AL:AM').clearContent();
+  dashboardSheet.getRange(1, 38, output.length, 2).setValues(output);
+  dashboardSheet.getRange('AL1:AM1')
     .setFontWeight('bold')
     .setBackground('#f3f3f3');
 
-  Logger.log(`[Equipment Logging] Wrote ${output.length - 1} equipment options to AH:AI.`);
+  Logger.log(`[Equipment Logging] Wrote ${output.length - 1} equipment options to AL:AM.`);
 }
 
 /**

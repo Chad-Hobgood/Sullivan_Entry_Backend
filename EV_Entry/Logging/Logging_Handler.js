@@ -18,6 +18,7 @@ function runLoggingUpdates() {
     ['calculateRegularVisitGaps', calculateRegularVisitGaps],
     ['calculateDayOfWeekDistribution', calculateDayOfWeekDistribution],
     ['calculateTimeOfDayByDay', calculateTimeOfDayByDay],
+    ['calculateMonthlyEntryCounts', calculateMonthlyEntryCounts],
     ['calculateEquipmentUsageCounts', calculateEquipmentUsageCounts],
   ];
 
