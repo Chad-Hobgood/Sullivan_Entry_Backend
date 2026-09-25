@@ -1,139 +1,89 @@
-# Sullivan EV Entry: Project Guide
+# Sullivan EV Entry Project Guide
 
-## Purpose
+## Purpose and boundaries
 
-Sullivan EV Entry is a Google Apps Script project for recording visits to the EV Design Studio and turning that history into dashboard-ready usage metrics. It is designed to reduce manual lab-assistant work while preserving a simple, readable attendance log.
+Sullivan EV Entry is a bound Google Apps Script project for capturing visits to the EV Design Studio, maintaining the attendance history, and refreshing dashboard source tables. It runs in the spreadsheet's Apps Script environment; this repository has no local package manager or automated test runner.
 
-The scripts are intended to be copied into or maintained as a bound Apps Script project for the entry workbook. They are not a standalone Node.js application and do not have a local package or test runner.
+The repository contains script source and operational documentation. It does not contain the production workbook or the private roster workbook. Apps Script files in this repository are separate files in one bound project and share global functions and configuration.
 
-## Repository layout
+## Repository map
 
-```text
-EV_Entry/
-├── Authorize_Entry.js       Manual authorization check
-├── Entry_Sheet/             Intake and log-maintenance scripts
-├── Equipment_Usage/         Equipment selection capture
-└── Logging/                 Dashboard metric scripts and handler
-    ├── Entry_Logging/       Individual entry analytics functions
-    └── Equipment_Logging/   Equipment analytics functions
-docs/                        Project documentation
-```
+| Path | Responsibility |
+| --- | --- |
+| `EV_Entry/Entry_Sheet/` | Entry trigger, daily date markers, duplicate cleanup, and one-time top-entry migration. |
+| `EV_Entry/Equipment_Usage/` | Records equipment dropdown selections and timestamps. |
+| `EV_Entry/Logging/Logging_Handler.js` | Sequential refresh entry point for all dashboard metrics. |
+| `EV_Entry/Logging/Entry_Logging/` | Attendance and entry analytics. |
+| `EV_Entry/Logging/Equipment_Logging/` | Equipment usage summary. |
+| `EV_Entry/Authorize_Entry.js` | Manual authorization check for the active and private lookup workbooks. |
+| `docs/` | Detailed system, metric, and operations documentation. |
 
-Each source file is a separate Apps Script file. Functions share the spreadsheet context and can therefore refer to the same workbook tabs.
+The short README files beside source areas summarize the files and link here. Use the [metric reference](METRIC_REFERENCE.md) for formulas, inputs, and output contracts, and the [operations runbook](OPERATIONS_RUNBOOK.md) for setup and incident response.
 
-## Workbook contract
+## Workbook contracts
 
-The active entry workbook must contain these tabs:
+### Entry workbook
+
+The bound workbook must include these tabs:
 
 | Tab | Role |
 | --- | --- |
-| `EV Design studio` | Entry history and intake area |
-| `Dashboard_Data_Link` | Dashboard source tables |
+| `EV Design studio` | Scan intake and visit history. |
+| `Dashboard_Data_Link` | Tables consumed by dashboard charts. |
+| `Equipment Usage` | Equipment dropdown intake and equipment history. |
 
-The entry sheet uses this layout:
+`EV_ENTRY_CONFIG` in `Entry_Sheet/OnEdit_Entry.js` is the authoritative configuration for entry and private lookup names/columns.
 
-| Location | Meaning |
+| Location in `EV Design studio` | Contract |
 | --- | --- |
-| Row 1 | Headers |
-| `B2` | Permanent intake cell for a scanned or typed student ID |
-| Row 3 onward | History, with newest records inserted at row 3 |
-| Column A | Date-only daily separator rows |
-| Column B | Student ID |
-| Column C | Engineering Village roster status |
-| Column D | Training status |
-| Column F | Visit timestamp |
+| Row 1 | Column labels. |
+| `B2` | Permanent scan/type intake cell. |
+| Row 3 onward | Visit history and date-only markers; newest records/markers are inserted at the top. |
+| A | Date-only daily separators. |
+| B | Student ID. |
+| C | Roster status snapshot (`Approved Entry` or `Not Approved Entry`). |
+| D | Training status snapshot (`Completed Training` or `Not Done Training`). |
+| F | Visit timestamp. |
 
-The shared configuration is defined at the top of `Entry_Sheet/OnEdit_Entry.js`. It contains the entry tab name, lookup workbook ID, lookup tab names, and source columns. Update that configuration if the workbook structure changes.
+Column E is currently unused by this workflow. Preserve IDs in B and real date values in F for analytics. Marker rows have a date in A and no visit timestamp; analytics ignore them.
 
-## Entry workflow
+### Private lookup workbook
 
-1. A staff member scans or types an ID into `EV Design studio!B2`.
-2. The installable `processEvEntryEdit` handler accepts only a single-cell edit to that exact cell. It is deliberately *not* named `onEdit`, so a restricted simple trigger cannot run it.
-3. The script obtains a document lock only for the row insertion and writes, so simultaneous scans do not collide. The event value is captured before waiting, preserving each scan if multiple edits arrive together.
-4. It reads only IDs from the configured private roster and certification sheets.
-5. It inserts a row below the intake row, writes the new record at row 3, and clears `B2`.
-6. Existing history moves down; no existing record is overwritten.
+The lookup workbook ID and tab details are held in `EV_ENTRY_CONFIG`. The script reads only the configured student-ID columns: `Current_Roster!C2:C` and `Moodle Certs!D3:D`. It writes only derived status strings into the entry workbook. The installable trigger owner must have access to the private workbook; ordinary entry operators do not need that access.
 
-The script writes two derived values: `EV Student` or `Not EV Student`, and `Completed Training` or `Not Done Training`. Names, email addresses, and other lookup fields are not copied into the entry workbook.
+### Equipment workbook tab
 
-`dailyDateStamper` should run once per day, normally at midnight. It inserts a date-only row at row 3, so scans made that day appear above the marker and the marker moves down with the day's records.
+`Equipment Usage!B1` is the selection dropdown. Each selection is recorded in B with its timestamp in C, newest first from row 2 onward. Dropdown choices can be inline or range-backed; the summary logger seeds the configured choices so unused items have zero counts.
 
-`cleanDuplicateEntries` should run hourly. For each student, it sorts valid timestamps chronologically, keeps the earliest swipe in each five-minute window, and removes later duplicates. It also removes fully empty rows. Date markers, partial rows, and rows without valid timestamps are preserved.
+## Data flow
 
-## Logging and dashboard outputs
+1. An installable spreadsheet edit trigger calls `processEvEntryEdit` for edits. It first offers the same event to `handleEquipmentUsageEdit`, which ignores all but `Equipment Usage!B1`.
+2. For `EV Design studio!B2`, the entry handler captures the event's ID, reads lookup IDs and derives statuses, then takes a document lock for inserting row 3 and writing the record. It clears B2 only if it still contains the ID processed by that event, protecting a newer scan.
+3. `dailyDateStamper` inserts a date-only row at row 3 once daily. New visits later insert above it.
+4. `cleanDuplicateEntries` examines history by timestamp, keeps the earliest swipe among repeated same-ID swipes within five minutes, and removes fully empty rows.
+5. `runLoggingUpdates` runs metric functions in order. Each metric writes its own table to `Dashboard_Data_Link`; see the [metric reference](METRIC_REFERENCE.md).
 
-The logging scripts read IDs from column B and timestamps from column F unless noted otherwise. Most functions clear their destination columns before writing a fresh table.
+The entry handler, date stamper, cleanup, and equipment recording use a shared document lock for sheet mutations. Lock acquisition is bounded by `lockWaitMs` (currently five seconds); it limits waiting, not the lifetime of a lock.
 
-| Function | Output | Description |
-| --- | --- | --- |
-| `calculateArrivalDistribution` | `A:D` | Counts entries by hour for the whole year, January-May, and August-December. |
-| `calculateUserFrequency` | `F:G` | Counts unique users and groups them into 1, 2-9, and 10+ visits. |
-| `calculateRollingUserCounts` | `I:J` | Counts unique users in the last 7, 14, and 30 days. |
-| `calculateDetailedVisitGaps` | `L:M` | Counts users by average gap between visits, capped at a 90+ day bucket. |
-| `calculateRegularVisitGaps` | `O:P` | Groups users by daily, weekly, bi-weekly, monthly, or occasional average visit gaps. |
-| `calculateDayOfWeekDistribution` | `R:S` | Reports average users per weekday, normalized by the number of observed dates. |
-| `calculateTimeOfDayByDay` | `U:AF`, then `U10:X30` | Writes a Monday-Sunday by 12 PM-10 PM grid and the 20 busiest day/time pairs. |
-| `calculateMonthlyEntryCounts` | `AH:AJ` | Counts swipes and unique users by month of year in August-July order, combining all available history. |
-| `calculateEquipmentUsageCounts` | `AL:AM` | Counts each equipment option recorded in `Equipment Usage!B2:B`, including configured dropdown options with zero uses. |
+## Design constraints
 
-`runLoggingUpdates` in `EV_Entry/Logging/Logging_Handler.js` calls the entry-logging functions and equipment logger in one Apps Script execution. Use it as the time-driven trigger target instead of creating one trigger per metric function. This reduces the number of Apps Script executions because one trigger invocation refreshes all logging tables; it does not reduce the spreadsheet work performed during that execution.
+- Keep the intake address (`B2`), sheet names, and source columns aligned with `EV_ENTRY_CONFIG` and this workbook contract.
+- Keep `processEvEntryEdit` as a non-reserved name and configure it as an installable edit trigger. Do not add or retain an `onEdit` simple trigger for the same workflow.
+- Preserve the document lock around row insertion/deletion and associated writes.
+- Treat dashboard ranges as a public interface to charts. Coordinate any output-range change with dashboard consumers and update the metric reference.
+- Do not log student IDs or copy roster names/email addresses into this workbook.
+- `prepareTopEntryLayout` is a one-time migration with sheet-changing behavior; back up first and follow the runbook.
 
-The handler also runs `calculateEquipmentUsageCounts`, so equipment counts refresh with the entry metrics. It logs its start and completion, each step before and after execution, and the function name and error message if a step fails. These messages use the `[Logging Handler]` prefix and are available in the Apps Script editor's **Executions** view.
+## Further reading
 
-The analytics functions expect valid JavaScript `Date` values in the timestamp column. Invalid or missing timestamps are ignored. The rolling counts use the execution time as “now,” so results change depending on when the function runs.
+- [Metric reference](METRIC_REFERENCE.md): calculation definitions, assumptions, and exact output ranges.
+- [Operations runbook](OPERATIONS_RUNBOOK.md): deployment, trigger ownership, routine refresh, and troubleshooting.
 
-## Deployment
+## Documentation maintenance map
 
-Before changing a production workbook, make a spreadsheet backup.
-
-1. Copy the current files into the bound Apps Script project.
-2. Confirm the entry tab is named `EV Design studio` and the dashboard tab is named `Dashboard_Data_Link`.
-3. Confirm the lookup workbook ID and lookup sheet names in `EV_ENTRY_CONFIG`.
-4. As the account that will own the production trigger, run `authorizeScript` manually and confirm that it reports successful access to both workbooks. Accept the requested permissions.
-5. Run `prepareTopEntryLayout` once if migrating an older bottom-appending layout. Review the function comments and back up first; it inserts the intake row and rebuilds columns C and D as values.
-6. Run `installEvEntryEditTrigger` once as that same account. It replaces this workflow's old edit trigger(s) **owned by that account** with exactly one installable spreadsheet edit trigger for `processEvEntryEdit`. Each other account that previously owned an `onEdit` trigger must delete its old trigger from **Triggers**; Apps Script triggers are user-owned. Do not create a simple `onEdit` function or an additional edit trigger manually.
-7. Point a daily time-driven trigger at `dailyDateStamper`.
-8. Point an hourly time-driven trigger at `cleanDuplicateEntries`.
-9. Run `runLoggingUpdates` manually once to confirm that all dashboard tables populate, then create one time-driven trigger for it. Remove the old time-driven triggers for the individual logging functions after the replacement has been tested.
-
-The account authorizing the script must be able to open the private lookup workbook. Lab assistants who only use the entry workbook do not need direct access to that lookup workbook.
-
-## Privacy and data handling
-
-The lookup integration intentionally reads only student-ID columns and converts matches into two status values. Do not replace this with `IMPORTRANGE`, `ARRAYFORMULA`, or other formulas that expose the private workbook to entry-workbook editors.
-
-Historical status values are snapshots. If roster or training membership changes later, old rows do not automatically recalculate. A separate, deliberate refresh process would be needed if historical statuses must be updated.
-
-Student IDs are not written to the diagnostic and operational log messages. Use the Apps Script editor's **Executions** view to inspect errors and checkpoints.
-
-## Troubleshooting
-
-### A scan does nothing
-
-Check that the edit is a single-cell edit to `B2` and the sheet name matches exactly. Run `diagnoseEvEntryConfiguration` as the trigger owner: lookup access must be `OK` and exactly one installable edit trigger, `processEvEntryEdit`, must be listed. The trigger owner also needs access to the private lookup workbook.
-
-### Lock timeout or apparent lock incident
-
-`LockService` locks are owned by an execution, not by a spreadsheet file. This project releases each acquired lock in `finally`, and Apps Script also releases a lock when its owning execution terminates. There is no safe 2 AM job that can forcibly release another execution's lock. The five-second `tryLock` limit is therefore intentionally a **wait** limit: a contended execution fails quickly without changing the intake cell, instead of queueing for 30 seconds. Inspect the execution that held the lock rather than attempting to clear it.
-
-For an incident, open **Executions**, filter the event time for **Running**, **Failed**, and **Timed out**, and compare the function/trigger type, owner, duration, and logs. Enable uncaught-exception logging to Cloud Operations and use Cloud Logging/Error Reporting for durable history.
-
-### A missing-sheet error appears
-
-Verify `EV Design studio`, `Dashboard_Data_Link`, `Current_Roster`, and `Moodle Certs` against the configured names. `diagnoseEvEntryConfiguration` reports the active workbook, available tabs, and lookup access without logging IDs.
-
-### Duplicate rows remain
-
-`cleanDuplicateEntries` only considers rows with both a student ID and a valid timestamp. It keeps the earliest timestamp and removes later timestamps within five minutes. Partial rows and date-only markers are intentionally retained.
-
-### Dashboard values look stale
-
-Run the relevant logging function manually and confirm that its output range is not being overwritten by another sheet formula or process. Check that timestamps are stored as dates, not text.
-
-## Safe change guidelines
-
-- Keep `B2` as the intake cell unless the configuration and deployment instructions are updated together.
-- Preserve the document lock around operations that insert or delete rows.
-- Treat `Dashboard_Data_Link` as an interface: changing an output range can break dashboard charts.
-- Test with a known non-production ID before enabling a trigger.
-- Back up the workbook before running migration or cleanup changes.
+| Change | Update |
+| --- | --- |
+| Entry tab name, intake cell, or source columns | `EV_ENTRY_CONFIG`, this guide's workbook contract, and the runbook checks. |
+| A dashboard metric, its meaning, or its destination | The metric implementation, handler list if scheduled, and `METRIC_REFERENCE.md`. |
+| Trigger installation or schedule | `OPERATIONS_RUNBOOK.md` and the relevant short area README if its entry point changes. |
+| New folder or script responsibility | The root repository map and the corresponding area README. |

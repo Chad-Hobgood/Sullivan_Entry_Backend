@@ -1,9 +1,7 @@
 # EV_Entry
 
-Google Apps Script for the EV Design Studio entry workbook.
+Apps Script source for the EV Design Studio attendance workbook. `Entry_Sheet/` captures and maintains visit history, `Equipment_Usage/` records dropdown selections, and `Logging/` refreshes dashboard tables.
 
-`Entry_Sheet/` contains the live intake workflow: scan an ID into `B2`, create a timestamped record at row 3, add daily date markers, and remove duplicate swipes. `Logging/` contains the functions that read the visit history and refresh dashboard data.
+The workbook uses `EV Design studio`, `Dashboard_Data_Link`, and `Equipment Usage`. The installable `processEvEntryEdit` trigger reads IDs from the private lookup workbook and stores only status values in the attendance history.
 
-The entry workflow expects a tab named `EV Design studio` and writes analytics to `Dashboard_Data_Link`. Its single installable `processEvEntryEdit` trigger reads only student-ID columns from the private lookup workbook and writes status values, not roster details, into the entry workbook.
-
-See [`../docs/README.md`](../docs/README.md) for deployment, trigger configuration, sheet layout, and troubleshooting.
+See the [project guide](../docs/PROJECT_GUIDE.md) for architecture and sheet contracts and the [operations runbook](../docs/OPERATIONS_RUNBOOK.md) for deployment and operations.

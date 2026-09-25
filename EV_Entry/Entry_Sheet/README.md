@@ -1,9 +1,7 @@
-# Entry_Sheet
+# Entry Sheet
 
-Scripts for capturing and maintaining EV Design Studio visits.
+Scripts for capturing visits, adding daily date markers, and cleaning duplicate or empty history rows. The shared configuration lives in `OnEdit_Entry.js`.
 
-- `OnEdit_Entry.js`: processes a single ID entered in `B2`, checks private lookup lists, and inserts the newest record at row 3.
-- `Daily_Date_Stamper.js`: inserts a date-only marker at row 3 for a new day.
-- `Clean_Log.js`: removes duplicate swipes within five minutes and fully empty rows.
+`processEvEntryEdit` must be installed as a spreadsheet edit trigger. Do not rename it to the reserved simple-trigger name `onEdit`.
 
-These scripts use the shared `EV_ENTRY_CONFIG` in `OnEdit_Entry.js`. `processEvEntryEdit` must run as the single installable spreadsheet edit trigger; do not rename it to the reserved simple-trigger name `onEdit`.
+See the [project guide](../../docs/PROJECT_GUIDE.md) for sheet layout and data flow and the [operations runbook](../../docs/OPERATIONS_RUNBOOK.md) for setup and recovery.
